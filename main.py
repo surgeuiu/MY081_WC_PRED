@@ -1,10 +1,9 @@
 
-
 import requests
 import time
-from datetime import datetime, timedelta
+import json
+from datetime import datetime
 
-sent_matches = set()
 BOT_TOKEN = "8824713902:AAHUlzA4RqtTAHkEbKbxS1r87cd2l6ZfdLE"
 CHAT_ID = "8699689811"
 
@@ -26,11 +25,16 @@ def get_matches():
 def predict_match(team1, team2):
     return f"🔥 Prediction 🔥\n{team1} 2 - 1 {team2}"
 
-# 🧠 Main Loop
-sent_matches = set()
+# 🧠 LOAD SENT MATCHES (permanent storage)
+try:
+    with open("sent_matches.json", "r") as f:
+        sent_matches = set(json.load(f))
+except:
+    sent_matches = set()
 
 print("Bot started with API...")
 
+# 🔁 Main Loop
 while True:
     try:
         matches = get_matches()
@@ -38,28 +42,25 @@ while True:
         for match in matches:
             match_id = match["idEvent"]
 
-# Skip if already sent
-if match_id in sent_matches:
-    continue
-            team1 = match["strHomeTeam"]
-            team2 = match["strAwayTeam"]
-            match_time_str = match["dateEvent"] + " " + match["strTime"]
+            # 🚫 Skip if already sent
+            if match_id in sent_matches:
+                continue
 
-            match_time = datetime.strptime(match_time_str, "%Y-%m-%d %H:%M:%S")
+            home = match["strHomeTeam"]
+            away = match["strAwayTeam"]
 
-            now = datetime.utcnow() + timedelta(hours=6)
+            message = predict_match(home, away)
 
-            # ⏰ 1.5 hour before match
-            if 0 < (match_time - now).total_seconds() <= 21800:
+            send_message(message)
 
-                key = f"{team1}-{team2}-{match_time}"
+            # ✅ Mark as sent
+            sent_matches.add(match_id)
 
-                if key not in sent_matches:
-                    msg = predict_match(team1, team2)
-                    send_message(msg)
-                    sent_matches.add(key)
+            # 💾 Save permanently
+            with open("sent_matches.json", "w") as f:
+                json.dump(list(sent_matches), f)
 
-        time.sleep(60)
+        time.sleep(60)  # run every 1 minute
 
     except Exception as e:
         print("Error:", e)
