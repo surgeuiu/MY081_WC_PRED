@@ -18,7 +18,7 @@ print("Bot started...")
 while True:
     try:
         send_message("Bot running ✅")
-        time.sleep(180)
+        time.sleep(300)
     except Exception as e:
         print("Loop error:", e)
         time.sleep(10)
