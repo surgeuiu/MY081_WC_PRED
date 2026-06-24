@@ -4,6 +4,7 @@ import requests
 import time
 from datetime import datetime, timedelta
 
+sent_matches = set()
 BOT_TOKEN = "8824713902:AAHUlzA4RqtTAHkEbKbxS1r87cd2l6ZfdLE"
 CHAT_ID = "8699689811"
 
@@ -35,6 +36,11 @@ while True:
         matches = get_matches()
 
         for match in matches:
+            match_id = match["idEvent"]
+
+# Skip if already sent
+if match_id in sent_matches:
+    continue
             team1 = match["strHomeTeam"]
             team2 = match["strAwayTeam"]
             match_time_str = match["dateEvent"] + " " + match["strTime"]
@@ -44,7 +50,7 @@ while True:
             now = datetime.utcnow() + timedelta(hours=6)
 
             # ⏰ 1.5 hour before match
-            if 0 < (match_time - now).total_seconds() <= 23700:
+            if 0 < (match_time - now).total_seconds() <= 21800:
 
                 key = f"{team1}-{team2}-{match_time}"
 
