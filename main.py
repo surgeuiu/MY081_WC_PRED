@@ -1,4 +1,5 @@
 
+
 import requests
 import time
 import json
@@ -7,6 +8,9 @@ from datetime import datetime
 BOT_TOKEN = "8824713902:AAHUlzA4RqtTAHkEbKbxS1r87cd2l6ZfdLE"
 CHAT_ID = "8699689811"
 
+
+FILE_NAME = "sent_matches.json"
+
 # 📩 Send Telegram Message
 def send_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -14,7 +18,7 @@ def send_message(text):
     requests.post(url, data=data)
     print("Sent:", text)
 
-# ⚽ Get matches from API
+# ⚽ Get matches
 def get_matches():
     url = "https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=2026-06-24&s=Soccer"
     response = requests.get(url)
@@ -25,42 +29,53 @@ def get_matches():
 def predict_match(team1, team2):
     return f"🔥 Prediction 🔥\n{team1} 2 - 1 {team2}"
 
-# 🧠 LOAD SENT MATCHES (permanent storage)
-try:
-    with open("sent_matches.json", "r") as f:
-        sent_matches = set(json.load(f))
-except:
-    sent_matches = set()
+# 📂 Load sent matches
+def load_sent():
+    try:
+        with open(FILE_NAME, "r") as f:
+            return set(json.load(f))
+    except:
+        return set()
 
-print("Bot started with API...")
+# 💾 Save instantly (IMPORTANT)
+def save_sent(sent):
+    with open(FILE_NAME, "w") as f:
+        json.dump(list(sent), f)
 
-# 🔁 Main Loop
+print("Bot started...")
+
 while True:
     try:
+        sent_matches = load_sent()   # 🔴 RELOAD EVERY LOOP (KEY FIX)
+
         matches = get_matches()
 
         for match in matches:
-            match_id = match["idEvent"]
+            match_id = match.get("idEvent")
 
-            # 🚫 Skip if already sent
-            if match_id in sent_matches:
+            # extra safety (sometimes API sends duplicates)
+            unique_key = f"{match_id}"
+
+            if unique_key in sent_matches:
                 continue
 
-            home = match["strHomeTeam"]
-            away = match["strAwayTeam"]
+            home = match.get("strHomeTeam")
+            away = match.get("strAwayTeam")
 
-            message = predict_match(home, away)
+            if not home or not away:
+                continue
 
-            send_message(message)
+            msg = predict_match(home, away)
 
-            # ✅ Mark as sent
-            sent_matches.add(match_id)
+            send_message(msg)
 
-            # 💾 Save permanently
-            with open("sent_matches.json", "w") as f:
-                json.dump(list(sent_matches), f)
+            # ✅ SAVE IMMEDIATELY AFTER SEND
+            sent_matches.add(unique_key)
+            save_sent(sent_matches)
 
-        time.sleep(60)  # run every 1 minute
+            time.sleep(2)  # avoid fast duplicate trigger
+
+        time.sleep(60)
 
     except Exception as e:
         print("Error:", e)
