@@ -1,4 +1,5 @@
 
+import math
 import requests
 import time
 from datetime import datetime, timedelta
@@ -22,9 +23,91 @@ def get_matches():
     return data.get("events", [])
 
 # 🤖 Prediction logic
-def predict_match(team1, team2):
-    return f"🔥 Prediction 🔥\n{team1} 2 - 1 {team2}"
 
+# ⚽ Get last matches of a team
+def get_last_matches(team):
+    url = f"https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t={team}"
+    res = requests.get(url).json()
+
+    if not res["teams"]:
+        return []
+
+    team_id = res["teams"][0]["idTeam"]
+
+    url2 = f"https://www.thesportsdb.com/api/v1/json/3/eventslast.php?id={team_id}"
+    res2 = requests.get(url2).json()
+
+    return res2.get("results", [])[:5]
+
+
+# 📊 Calculate team stats
+def get_team_stats(team):
+    matches = get_last_matches(team)
+
+    goals_for = 0
+    goals_against = 0
+    count = 0
+
+    for m in matches:
+        if not m["intHomeScore"] or not m["intAwayScore"]:
+            continue
+
+        if m["strHomeTeam"] == team:
+            goals_for += int(m["intHomeScore"])
+            goals_against += int(m["intAwayScore"])
+        else:
+            goals_for += int(m["intAwayScore"])
+            goals_against += int(m["intHomeScore"])
+
+        count += 1
+
+    if count == 0:
+        return 1.2, 1.2  # default
+
+    return goals_for / count, goals_against / count
+
+
+# 🧠 Poisson probability
+def poisson(lmbda, k):
+    return (lmbda ** k) * math.exp(-lmbda) / math.factorial(k)
+
+
+# 🤖 FINAL AI PREDICTION
+def predict_match(team1, team2):
+    gf1, ga1 = get_team_stats(team1)
+    gf2, ga2 = get_team_stats(team2)
+
+    # expected goals
+    exp1 = (gf1 + ga2) / 2
+    exp2 = (gf2 + ga1) / 2
+
+    max_goals = 5
+    best_score = (0, 0)
+    best_prob = 0
+
+    # find most probable score
+    for i in range(max_goals):
+        for j in range(max_goals):
+            prob = poisson(exp1, i) * poisson(exp2, j)
+            if prob > best_prob:
+                best_prob = prob
+                best_score = (i, j)
+
+    g1, g2 = best_score
+
+    # winner
+    if g1 > g2:
+        winner = team1
+    elif g2 > g1:
+        winner = team2
+    else:
+        winner = "Draw"
+
+    return f"""🔥 AI Prediction (Poisson Model) 🔥
+{team1} {g1} - {g2} {team2}
+Winner: {winner}
+Confidence: {round(best_prob*100,2)}%
+"""
 # 🧠 Check if match is upcoming (KEY FIX)
 def is_match_upcoming(date_str, time_str):
     try:
