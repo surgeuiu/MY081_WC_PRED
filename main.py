@@ -1,11 +1,11 @@
 
 import requests
 import time
-import json
+from datetime import datetime, timedelta
 
 BOT_TOKEN = "8824713902:AAHUlzA4RqtTAHkEbKbxS1r87cd2l6ZfdLE"
 CHAT_ID = "8699689811"
-FILE_NAME = "sent_matches.json"
+
 
 # 📩 Send Telegram Message
 def send_message(text):
@@ -14,73 +14,66 @@ def send_message(text):
     requests.post(url, data=data)
     print("Sent:", text)
 
-# ⚽ Get matches
+# ⚽ Get matches from API
 def get_matches():
     url = "https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=2026-06-24&s=Soccer"
     response = requests.get(url)
     data = response.json()
     return data.get("events", [])
 
-# 🤖 Prediction
+# 🤖 Prediction logic
 def predict_match(team1, team2):
     return f"🔥 Prediction 🔥\n{team1} 2 - 1 {team2}"
 
-# 📂 Load file
-def load_sent():
+# 🧠 Check if match is upcoming (KEY FIX)
+def is_match_upcoming(date_str, time_str):
     try:
-        with open(FILE_NAME, "r") as f:
-            return set(json.load(f))
+        match_time = datetime.strptime(date_str + " " + time_str, "%Y-%m-%d %H:%M:%S")
+        now = datetime.utcnow()
+
+        # send only if match is within next 2 hours
+        diff = (match_time - now).total_seconds()
+        return 0 <= diff <= 7200
     except:
-        return set()
+        return False
 
-# 💾 Save file
-def save_sent(data):
-    with open(FILE_NAME, "w") as f:
-        json.dump(list(data), f)
-
-print("Bot started...")
+print("🚀 Bot started (Railway Safe Mode)...")
 
 while True:
     try:
-        sent_matches = load_sent()
-
         matches = get_matches()
 
-        seen_in_this_loop = set()   # 🔥 NEW (fix same-loop duplicate)
+        seen_in_this_loop = set()  # prevent same-loop duplicate
 
         for match in matches:
-            match_id = match.get("idEvent")
             home = match.get("strHomeTeam")
             away = match.get("strAwayTeam")
+            date = match.get("dateEvent")
+            time_str = match.get("strTime")
 
-            if not match_id or not home or not away:
+            if not home or not away or not date or not time_str:
                 continue
 
-            # 🔥 STRONG UNIQUE KEY
-            unique_key = f"{match_id}_{home}_{away}"
+            # 🔥 FILTER: only upcoming matches
+            if not is_match_upcoming(date, time_str):
+                continue
 
-            # 🚫 Skip if duplicate in same loop
+            # 🔥 UNIQUE KEY
+            unique_key = f"{home}_{away}_{date}_{time_str}"
+
             if unique_key in seen_in_this_loop:
-                continue
-
-            # 🚫 Skip if already sent before
-            if unique_key in sent_matches:
                 continue
 
             seen_in_this_loop.add(unique_key)
 
-            msg = predict_match(home, away)
-            send_message(msg)
+            # 📤 Send prediction
+            message = predict_match(home, away)
+            send_message(message)
 
-            # ✅ Save immediately
-            sent_matches.add(unique_key)
-            save_sent(sent_matches)
+            time.sleep(2)  # prevent rapid duplicate
 
-            time.sleep(3)  # small delay
-
-        time.sleep(60)
+        time.sleep(60)  # check every 1 min
 
     except Exception as e:
         print("Error:", e)
         time.sleep(60)
-
