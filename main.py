@@ -1,101 +1,90 @@
 
-import math
 import requests
 import time
+import json
+import os
+import math
 from datetime import datetime, timedelta
 
 BOT_TOKEN = "8824713902:AAHUlzA4RqtTAHkEbKbxS1r87cd2l6ZfdLE"
 CHAT_ID = "8699689811"
 
+FILE_NAME = "sent_matches.json"
 
-# 📩 Send Telegram Message
+# =========================
+# LOAD SENT MATCHES
+# =========================
+def load_sent():
+    if os.path.exists(FILE_NAME):
+        with open(FILE_NAME, "r") as f:
+            return set(json.load(f))
+    return set()
+
+def save_sent(sent):
+    with open(FILE_NAME, "w") as f:
+        json.dump(list(sent), f)
+
+sent_matches = load_sent()
+
+# =========================
+# SEND TELEGRAM
+# =========================
 def send_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": text}
-    requests.post(url, data=data)
-    print("Sent:", text)
+    requests.post(url, data={"chat_id": CHAT_ID, "text": text})
+    print("✅ Sent:", text)
 
-# ⚽ Get matches from API
+# =========================
+# GET MATCHES (TODAY)
+# =========================
 def get_matches():
-    url = "https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=2026-06-24&s=Soccer"
-    response = requests.get(url)
-    data = response.json()
-    return data.get("events", [])
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={today}&s=Soccer"
 
-# 🤖 Prediction logic
-
-# ⚽ Get last matches of a team
-def get_last_matches(team):
-    url = f"https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t={team}"
-    res = requests.get(url).json()
-
-    if not res["teams"]:
+    try:
+        res = requests.get(url, timeout=10)
+        data = res.json()
+        return data.get("events", [])
+    except:
         return []
 
-    team_id = res["teams"][0]["idTeam"]
+# =========================
+# CHECK TIME WINDOW
+# =========================
+def is_match_soon(date_str, time_str):
+    try:
+        match_dt = datetime.strptime(date_str + " " + time_str, "%Y-%m-%d %H:%M:%S")
+        now = datetime.utcnow()
 
-    url2 = f"https://www.thesportsdb.com/api/v1/json/3/eventslast.php?id={team_id}"
-    res2 = requests.get(url2).json()
+        diff = match_dt - now
 
-    return res2.get("results", [])[:5]
+        return timedelta(hours=1) <= diff <= timedelta(hours=2)
+    except:
+        return False
 
-
-# 📊 Calculate team stats
-def get_team_stats(team):
-    matches = get_last_matches(team)
-
-    goals_for = 0
-    goals_against = 0
-    count = 0
-
-    for m in matches:
-        if not m["intHomeScore"] or not m["intAwayScore"]:
-            continue
-
-        if m["strHomeTeam"] == team:
-            goals_for += int(m["intHomeScore"])
-            goals_against += int(m["intAwayScore"])
-        else:
-            goals_for += int(m["intAwayScore"])
-            goals_against += int(m["intHomeScore"])
-
-        count += 1
-
-    if count == 0:
-        return 1.2, 1.2  # default
-
-    return goals_for / count, goals_against / count
-
-
-# 🧠 Poisson probability
+# =========================
+# AI PREDICTION (POISSON)
+# =========================
 def poisson(lmbda, k):
     return (lmbda ** k) * math.exp(-lmbda) / math.factorial(k)
 
-
-# 🤖 FINAL AI PREDICTION
 def predict_match(team1, team2):
-    gf1, ga1 = get_team_stats(team1)
-    gf2, ga2 = get_team_stats(team2)
+    # simple fallback averages (fast + stable)
+    exp1 = 1.4
+    exp2 = 1.2
 
-    # expected goals
-    exp1 = (gf1 + ga2) / 2
-    exp2 = (gf2 + ga1) / 2
-
-    max_goals = 5
-    best_score = (0, 0)
+    best = (0, 0)
     best_prob = 0
 
-    # find most probable score
-    for i in range(max_goals):
-        for j in range(max_goals):
-            prob = poisson(exp1, i) * poisson(exp2, j)
-            if prob > best_prob:
-                best_prob = prob
-                best_score = (i, j)
+    for i in range(5):
+        for j in range(5):
+            p = poisson(exp1, i) * poisson(exp2, j)
+            if p > best_prob:
+                best_prob = p
+                best = (i, j)
 
-    g1, g2 = best_score
+    g1, g2 = best
 
-    # winner
     if g1 > g2:
         winner = team1
     elif g2 > g1:
@@ -103,60 +92,47 @@ def predict_match(team1, team2):
     else:
         winner = "Draw"
 
-    return f"""🔥 AI Prediction (Poisson Model) 🔥
+    return f"""🔥 AI Prediction 🔥
 {team1} {g1} - {g2} {team2}
 Winner: {winner}
 Confidence: {round(best_prob*100,2)}%
 """
-# 🧠 Check if match is upcoming (KEY FIX)
-def is_match_upcoming(date_str, time_str):
-    try:
-        match_time = datetime.strptime(date_str + " " + time_str, "%Y-%m-%d %H:%M:%S")
-        now = datetime.utcnow()
 
-        # send only if match is within next 2 hours
-        diff = (match_time - now).total_seconds()
-        return 0 <= diff <= 7200
-    except:
-        return False
-
-print("🚀 Bot started (Railway Safe Mode)...")
+# =========================
+# MAIN LOOP
+# =========================
+print("🚀 Bot started (Production Mode)...")
 
 while True:
     try:
         matches = get_matches()
 
-        seen_in_this_loop = set()  # prevent same-loop duplicate
-
         for match in matches:
-            home = match.get("strHomeTeam")
-            away = match.get("strAwayTeam")
+            event_id = match.get("idEvent")
+            team1 = match.get("strHomeTeam")
+            team2 = match.get("strAwayTeam")
             date = match.get("dateEvent")
             time_str = match.get("strTime")
 
-            if not home or not away or not date or not time_str:
+            if not all([event_id, team1, team2, date, time_str]):
                 continue
 
-            # 🔥 FILTER: only upcoming matches
-            if not is_match_upcoming(date, time_str):
+            # UNIQUE KEY (no duplicate forever)
+            unique_id = f"{event_id}"
+
+            if unique_id in sent_matches:
                 continue
 
-            # 🔥 UNIQUE KEY
-            unique_key = f"{home}_{away}_{date}_{time_str}"
+            if is_match_soon(date, time_str):
+                prediction = predict_match(team1, team2)
 
-            if unique_key in seen_in_this_loop:
-                continue
+                send_message(prediction)
 
-            seen_in_this_loop.add(unique_key)
+                sent_matches.add(unique_id)
+                save_sent(sent_matches)
 
-            # 📤 Send prediction
-            message = predict_match(home, away)
-            send_message(message)
-
-            time.sleep(2)  # prevent rapid duplicate
-
-        time.sleep(60)  # check every 1 min
+        time.sleep(60)
 
     except Exception as e:
-        print("Error:", e)
-        time.sleep(60)
+        print("❌ Error:", e)
+        time.sleep(30)
