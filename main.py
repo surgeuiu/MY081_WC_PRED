@@ -1,4 +1,5 @@
 
+
 import requests
 import time
 from datetime import datetime, timedelta
@@ -6,43 +7,54 @@ from datetime import datetime, timedelta
 BOT_TOKEN = "8824713902:AAHUlzA4RqtTAHkEbKbxS1r87cd2l6ZfdLE"
 CHAT_ID = "8699689811"
 
-
 # 📩 Send Telegram Message
 def send_message(text):
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        data = {"chat_id": CHAT_ID, "text": text}
-        requests.post(url, data=data)
-        print("Message sent:", text)
-    except Exception as e:
-        print("Send error:", e)
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": text}
+    requests.post(url, data=data)
+    print("Sent:", text)
 
-# ⚽ Prediction Logic
+# ⚽ Get matches from API
+def get_matches():
+    url = "https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=2026-06-24&s=Soccer"
+    response = requests.get(url)
+    data = response.json()
+    return data.get("events", [])
+
+# 🤖 Prediction logic
 def predict_match(team1, team2):
     return f"🔥 Prediction 🔥\n{team1} 2 - 1 {team2}"
 
-# 🕒 Set Match Time (TEST: 2 minutes from now)
-match_time = datetime.now() + timedelta(minutes=2)
+# 🧠 Main Loop
+sent_matches = set()
 
-print("Bot started...")
+print("Bot started with API...")
 
-# 🔁 Main Loop (Never stops)
 while True:
     try:
-        now = datetime.now()
-        time_left = (match_time - now).total_seconds()
+        matches = get_matches()
 
-        print(f"Checking... Time left: {time_left}")
+        for match in matches:
+            team1 = match["strHomeTeam"]
+            team2 = match["strAwayTeam"]
+            match_time_str = match["dateEvent"] + " " + match["strTime"]
 
-        # ⏰ Trigger before match (within 2 min for test)
-        if 0 < time_left <= 120:
-            send_message(predict_match("Argentina", "Austria"))
-            
-            # 🛑 Prevent duplicate sending
-            time.sleep(180)
+            match_time = datetime.strptime(match_time_str, "%Y-%m-%d %H:%M:%S")
 
-        time.sleep(300)
+            now = datetime.utcnow() + timedelta(hours=6)
+
+            # ⏰ 1.5 hour before match
+            if 0 < (match_time - now).total_seconds() <= 23700:
+
+                key = f"{team1}-{team2}-{match_time}"
+
+                if key not in sent_matches:
+                    msg = predict_match(team1, team2)
+                    send_message(msg)
+                    sent_matches.add(key)
+
+        time.sleep(60)
 
     except Exception as e:
         print("Error:", e)
-        time.sleep(10)
+        time.sleep(60)
