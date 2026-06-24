@@ -2,26 +2,35 @@ import requests
 import time
 from datetime import datetime, timedelta
 
-BOT_TOKEN = "8824713902:AAHUlzA4RqtTAHkEbKbxS1r87cd2l6ZfdLE"
-CHAT_ID = "8699689811"   # your chat id
+BOT_TOKEN = "YOUR_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"
 
 def send_message(text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": text}
-    requests.post(url, data=data)
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        data = {"chat_id": CHAT_ID, "text": text}
+        requests.post(url, data=data)
+        print("Message sent:", text)
+    except Exception as e:
+        print("Send error:", e)
 
 def predict_match(team1, team2):
-    # Simple logic (you can upgrade later)
     return f"Prediction:\n{team1} 2 - 1 {team2}"
 
 def check_matches():
-    # Example match (you will later connect API)
-    match_time = datetime.now() + timedelta(hours=2)
+    print("Checking matches...")
 
-    if datetime.now() >= match_time - timedelta(hours=1.5):
-        prediction = predict_match("Argentina", "Austria")
-        send_message(prediction)
+    # TEST MODE (always sends message)
+    prediction = predict_match("Argentina", "Austria")
+    send_message(prediction)
+
+# 🔁 KEEP BOT ALIVE
+print("Bot started...")
 
 while True:
-    check_matches()
-    time.sleep(300)  # check every 5 minutes
+    try:
+        check_matches()
+        time.sleep(60)  # every 1 min
+    except Exception as e:
+        print("Error:", e)
+        time.sleep(10)
