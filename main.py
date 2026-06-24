@@ -2,8 +2,8 @@ import requests
 import time
 from datetime import datetime, timedelta
 
-BOT_TOKEN = "YOUR_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+BOT_TOKEN = "8824713902:AAHUlzA4RqtTAHkEbKbxS1r87cd2l6ZfdLE"
+CHAT_ID = "8699689811"
 
 def send_message(text):
     try:
